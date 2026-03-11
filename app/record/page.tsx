@@ -355,7 +355,7 @@ export default function RecordPage() {
   // ── 名前入力画面 ──
   if (userName === null && userId) {
     const handleStart = () => {
-      if (!nameInput.trim()) return;
+      if (!companyInput.trim() || !nameInput.trim()) return;
       setCompanyName(companyInput.trim());
       setUserName(nameInput.trim());
     };
@@ -370,15 +370,15 @@ export default function RecordPage() {
             </p>
           </div>
 
-          {/* 会社名（任意） */}
+          {/* 会社名（必須） */}
           <div className="w-full">
             <label style={{ color: 'var(--muted)' }} className="text-xs font-medium mb-1.5 block">
-              会社名・組織名
-              <span className="ml-1 opacity-60 font-normal">（任意）</span>
+              会社名・組織名 <span style={{ color: 'var(--danger)' }}>*</span>
             </label>
             <input
               type="text" placeholder="例：株式会社サンプル"
               value={companyInput} onChange={e => setCompanyInput(e.target.value)}
+              autoFocus
               className="w-full px-4 py-3 rounded-xl text-sm outline-none"
               style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text)' }}
             />
@@ -400,7 +400,7 @@ export default function RecordPage() {
 
           <button
             onClick={handleStart}
-            disabled={!nameInput.trim()}
+            disabled={!companyInput.trim() || !nameInput.trim()}
             className="w-full py-3 rounded-xl font-semibold text-sm transition-opacity disabled:opacity-40"
             style={{ background: 'var(--accent)', color: '#fff' }}
           >
