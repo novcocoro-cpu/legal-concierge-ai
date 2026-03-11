@@ -44,14 +44,42 @@ export async function GET(req: NextRequest) {
   }
 }
 
+// 会社を検索 or 作成して id を返す
+async function resolveCompanyId(supabase: ReturnType<typeof createServerClient>, companyName: string): Promise<string | null> {
+  const name = companyName.trim() || '個人 / 未設定';
+  const { data: existing } = await supabase
+    .from('companies').select('id').eq('name', name).maybeSingle();
+  if (existing) return existing.id;
+  const { data: created } = await supabase
+    .from('companies').insert({ name }).select('id').single();
+  return created?.id ?? null;
+}
+
+// メンバーを検索 or 作成して id を返す
+async function resolveMemberId(supabase: ReturnType<typeof createServerClient>, companyId: string, memberName: string): Promise<string | null> {
+  const name = memberName.trim() || '名無し';
+  const { data: existing } = await supabase
+    .from('members').select('id').eq('company_id', companyId).eq('name', name).maybeSingle();
+  if (existing) return existing.id;
+  const { data: created } = await supabase
+    .from('members').insert({ company_id: companyId, name }).select('id').single();
+  return created?.id ?? null;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const supabase = createServerClient();
 
+    // 会社・メンバーを自動解決
+    const companyId = await resolveCompanyId(supabase, body.company_name ?? '');
+    const memberId  = companyId ? await resolveMemberId(supabase, companyId, body.user_name ?? '') : null;
+
+    const row = { ...body, company_id: companyId, member_id: memberId };
+
     const { data, error } = await supabase
       .from('meetings')
-      .insert([body])
+      .insert([row])
       .select()
       .single();
 

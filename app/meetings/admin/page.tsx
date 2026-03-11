@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatDuration, formatDate } from '@/lib/utils';
-import type { Meeting, ActionItem, ErrorLog } from '@/types';
+import type { Meeting, ActionItem, ErrorLog, Company, Member } from '@/types';
 
 // ─────────────────────────────────────────────
 // 型定義
@@ -126,37 +126,27 @@ function LoginScreen({ onLogin }: { onLogin: (pw: string) => Promise<boolean> })
 }
 
 // ─────────────────────────────────────────────
-// 会議一覧タブ
+// 会議一覧タブ（3階層ドリルダウン）
+// 会社一覧 → メンバー一覧 → 会議一覧 → 詳細
 // ─────────────────────────────────────────────
-interface MeetingGroup { company: string; label: string; items: Meeting[]; }
-
-function buildMeetingGroups(meetings: Meeting[]): MeetingGroup[] {
-  const map = new Map<string, Meeting[]>();
-  for (const m of meetings) {
-    const key = (m.company_name ?? '').trim();
-    if (!map.has(key)) map.set(key, []);
-    map.get(key)!.push(m);
-  }
-  return [...map.entries()]
-    .map(([company, items]) => ({ company, label: company || '個人 / 未設定', items }))
-    .sort((a, b) => {
-      if (!a.company && b.company) return 1;
-      if (a.company && !b.company) return -1;
-      return a.label.localeCompare(b.label, 'ja');
-    });
-}
+type DrillLevel = 'companies' | 'members' | 'meetings';
 
 function MeetingsTab({ pw }: { pw: string }) {
   const router = useRouter();
   const [stats, setStats] = useState<Stats | null>(null);
-  const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [members, setMembers]     = useState<Member[]>([]);
+  const [meetings, setMeetings]   = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
-  const [selected, setSelected] = useState<Meeting | null>(null);
+
+  // ドリルダウン状態
+  const [level, setLevel] = useState<DrillLevel>('companies');
+  const [selCompany, setSelCompany] = useState<Company | null>(null);
+  const [selMember, setSelMember]   = useState<Member | null>(null);
+  const [selMeeting, setSelMeeting] = useState<Meeting | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [search, setSearch] = useState('');
-  const [companyFilter, setCompanyFilter] = useState('');
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const headers = { 'x-admin-password': pw };
 
@@ -167,6 +157,8 @@ function MeetingsTab({ pw }: { pw: string }) {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error ?? '取得失敗');
       setStats(d.stats);
+      setCompanies(d.companies ?? []);
+      setMembers(d.members ?? []);
       setMeetings(d.meetings ?? []);
     } catch (e) { setErr(String(e)); }
     setLoading(false);
@@ -174,34 +166,42 @@ function MeetingsTab({ pw }: { pw: string }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // ドリルダウン操作
+  const openCompany = (c: Company) => {
+    setSelCompany(c); setSelMember(null); setSelMeeting(null);
+    setLevel('members'); setSearch('');
+  };
+  const openMember = (m: Member) => {
+    setSelMember(m); setSelMeeting(null);
+    setLevel('meetings'); setSearch('');
+  };
+  const goBack = () => {
+    if (level === 'meetings') { setLevel('members'); setSelMember(null); setSelMeeting(null); setSearch(''); }
+    else if (level === 'members') { setLevel('companies'); setSelCompany(null); setSearch(''); }
+  };
   const selectMeeting = async (m: Meeting) => {
-    setLoadingDetail(true);
-    setSelected(m);
+    setSelMeeting(m); setLoadingDetail(true);
     try {
       const r = await fetch(`/api/admin?id=${m.id}`, { headers });
       const d = await r.json();
-      if (d.meeting) setSelected(d.meeting);
-    } catch { /* use summary data */ }
+      if (d.meeting) setSelMeeting(d.meeting);
+    } catch { /* fallback */ }
     setLoadingDetail(false);
   };
 
-  const toggleGroup = (company: string) => {
-    setCollapsed(prev => {
-      const next = new Set(prev);
-      if (next.has(company)) next.delete(company); else next.add(company);
-      return next;
-    });
-  };
-
-  const filtered = meetings.filter(m => {
-    const matchSearch = (m.title ?? '').toLowerCase().includes(search.toLowerCase()) ||
-      (m.user_name ?? '').toLowerCase().includes(search.toLowerCase());
-    const matchCompany = !companyFilter || (m.company_name ?? '').toLowerCase().includes(companyFilter.toLowerCase());
-    return matchSearch && matchCompany;
-  });
-
-  const groups = buildMeetingGroups(filtered);
-  const totalFiltered = filtered.length;
+  // フィルタ済みリスト
+  const q = search.toLowerCase();
+  const companyMemberCount = (cId: string) => members.filter(m => m.company_id === cId).length;
+  const companyMeetingCount = (cId: string) => meetings.filter(m => m.company_id === cId).length;
+  const filteredCompanies = companies.filter(c => c.name.toLowerCase().includes(q));
+  const filteredMembers = selCompany
+    ? members.filter(m => m.company_id === selCompany.id && m.name.toLowerCase().includes(q))
+    : [];
+  const memberMeetingCount = (mId: string) => meetings.filter(m => m.member_id === mId).length;
+  const filteredMeetings = selMember
+    ? meetings.filter(m => m.member_id === selMember.id &&
+        ((m.title ?? '').toLowerCase().includes(q) || (m.summary ?? '').toLowerCase().includes(q)))
+    : [];
 
   if (loading) return <Spinner />;
 
@@ -217,85 +217,116 @@ function MeetingsTab({ pw }: { pw: string }) {
         </div>
       )}
       <div className="flex gap-4 flex-1 min-h-0">
-        {/* 会議一覧 */}
+        {/* 左パネル：ドリルダウン */}
         <div className="w-80 flex-shrink-0 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden">
+          {/* ヘッダー */}
           <div className="px-4 py-3 border-b border-gray-100 flex-shrink-0 space-y-2">
+            {level !== 'companies' && (
+              <button onClick={goBack} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium mb-1">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+                戻る
+              </button>
+            )}
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-gray-700">会議一覧</span>
-              <span className="text-xs text-gray-400">{totalFiltered} 件</span>
+              <span className="text-sm font-semibold text-gray-700">
+                {level === 'companies' && '🏢 会社一覧'}
+                {level === 'members' && `👤 ${selCompany?.name} のメンバー`}
+                {level === 'meetings' && `📋 ${selMember?.name} の会議`}
+              </span>
+              <span className="text-xs text-gray-400">
+                {level === 'companies' && `${filteredCompanies.length} 社`}
+                {level === 'members' && `${filteredMembers.length} 名`}
+                {level === 'meetings' && `${filteredMeetings.length} 件`}
+              </span>
             </div>
-            <input value={companyFilter} onChange={e => setCompanyFilter(e.target.value)}
-              placeholder="会社名で絞り込み..."
-              className="w-full px-3 py-1.5 text-xs border border-indigo-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-300 bg-indigo-50 placeholder-indigo-300" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="タイトル・氏名で検索..."
+              placeholder={level === 'companies' ? '会社名で検索...' : level === 'members' ? '名前で検索...' : 'タイトルで検索...'}
               className="w-full px-3 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-300" />
           </div>
+
+          {/* リスト */}
           <div className="flex-1 overflow-y-auto">
-            {groups.length === 0 && <p className="text-sm text-gray-400 text-center py-10">会議なし</p>}
-            {groups.map(group => (
-              <div key={group.company}>
-                {/* グループヘッダー */}
-                <button
-                  onClick={() => toggleGroup(group.company)}
-                  className="w-full flex items-center justify-between px-4 py-2 bg-gray-50 hover:bg-gray-100 border-b border-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <svg className={`w-3 h-3 text-gray-400 flex-shrink-0 transition-transform ${collapsed.has(group.company) ? '-rotate-90' : ''}`}
-                      fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                    <span className="text-xs font-semibold text-gray-600 truncate">
-                      {group.company ? `🏢 ${group.label}` : `👤 ${group.label}`}
-                    </span>
-                  </div>
-                  <span className="text-xs text-gray-400 flex-shrink-0 ml-2 bg-gray-200 rounded-full px-1.5 py-0.5">{group.items.length}</span>
-                </button>
-                {/* グループアイテム */}
-                {!collapsed.has(group.company) && group.items.map(m => (
-                  <div key={m.id}
-                    className={`border-b border-gray-50 ${selected?.id === m.id ? 'bg-blue-50 border-l-2 border-l-blue-600' : ''}`}>
-                    <button onClick={() => selectMeeting(m)}
-                      className="w-full text-left px-4 pt-3 pb-1 hover:bg-blue-50 transition-colors">
-                      <p className="text-sm font-medium text-gray-800 line-clamp-1">{m.title || '（タイトルなし）'}</p>
-                      <div className="flex justify-between mt-0.5">
-                        <span className="text-xs text-gray-400">👤 {m.user_name}</span>
-                        <span className="text-xs text-gray-400">{formatDuration(m.duration_seconds)}</span>
-                      </div>
-                      <p className="text-xs text-gray-300 mt-0.5">{fmt(m.created_at)}</p>
-                    </button>
-                    <div className="px-4 pb-2">
-                      <button onClick={() => router.push(`/history/${m.id}`)}
-                        className="text-xs text-blue-500 hover:text-blue-700 hover:underline font-medium">
-                        詳細を開く →
-                      </button>
+            {/* 会社一覧 */}
+            {level === 'companies' && (
+              filteredCompanies.length === 0
+                ? <p className="text-sm text-gray-400 text-center py-10">会社なし</p>
+                : filteredCompanies.map(c => (
+                  <button key={c.id} onClick={() => openCompany(c)}
+                    className="w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-blue-50 transition-colors group">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-gray-800">{c.name}</span>
+                      <svg className="w-4 h-4 text-gray-300 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
                     </div>
-                  </div>
-                ))}
-              </div>
-            ))}
+                    <div className="flex gap-3 mt-1">
+                      <span className="text-xs text-gray-400">👤 {companyMemberCount(c.id)} 名</span>
+                      <span className="text-xs text-gray-400">📋 {companyMeetingCount(c.id)} 件</span>
+                    </div>
+                  </button>
+                ))
+            )}
+
+            {/* メンバー一覧 */}
+            {level === 'members' && (
+              filteredMembers.length === 0
+                ? <p className="text-sm text-gray-400 text-center py-10">メンバーなし</p>
+                : filteredMembers.map(m => (
+                  <button key={m.id} onClick={() => openMember(m)}
+                    className="w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-blue-50 transition-colors group">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                          {m.name.slice(0, 1)}
+                        </div>
+                        <span className="text-sm font-medium text-gray-800">{m.name}</span>
+                      </div>
+                      <svg className="w-4 h-4 text-gray-300 group-hover:text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1 ml-9">📋 {memberMeetingCount(m.id)} 件</p>
+                  </button>
+                ))
+            )}
+
+            {/* 会議一覧 */}
+            {level === 'meetings' && (
+              filteredMeetings.length === 0
+                ? <p className="text-sm text-gray-400 text-center py-10">会議なし</p>
+                : filteredMeetings.map(m => (
+                  <button key={m.id} onClick={() => selectMeeting(m)}
+                    className={`w-full text-left px-4 py-3 border-b border-gray-50 transition-colors ${selMeeting?.id === m.id ? 'bg-blue-50 border-l-2 border-l-blue-600' : 'hover:bg-gray-50'}`}>
+                    <p className="text-sm font-medium text-gray-800 line-clamp-1">{m.title || '（タイトルなし）'}</p>
+                    <div className="flex justify-between mt-0.5">
+                      <span className="text-xs text-gray-400">{fmt(m.created_at)}</span>
+                      <span className="text-xs text-gray-400">{formatDuration(m.duration_seconds)}</span>
+                    </div>
+                  </button>
+                ))
+            )}
           </div>
         </div>
 
-        {/* 詳細ビューワー */}
+        {/* 右パネル：会議詳細 */}
         <div className="flex-1 bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden">
-          {selected ? (
+          {selMeeting ? (
             <>
               <div className="px-5 py-4 border-b border-gray-100 flex-shrink-0">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-base font-semibold text-gray-800">{selected.title}</p>
+                    <p className="text-base font-semibold text-gray-800">{selMeeting.title}</p>
                     <div className="flex flex-wrap gap-3 mt-1">
-                      <span className="text-xs text-gray-400">{fmt(selected.created_at)}</span>
-                      {selected.company_name && <span className="text-xs text-gray-400">🏢 {selected.company_name}</span>}
-                      <span className="text-xs text-gray-400">👤 {selected.user_name}</span>
-                      <span className="text-xs text-gray-400">⏱ {formatDuration(selected.duration_seconds)}</span>
+                      <span className="text-xs text-gray-400">{fmt(selMeeting.created_at)}</span>
+                      {selMeeting.company_name && <span className="text-xs text-gray-400">🏢 {selMeeting.company_name}</span>}
+                      <span className="text-xs text-gray-400">👤 {selMeeting.user_name}</span>
+                      <span className="text-xs text-gray-400">⏱ {formatDuration(selMeeting.duration_seconds)}</span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => router.push(`/history/${selected.id}`)}
-                    className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors"
-                  >
+                  <button onClick={() => router.push(`/history/${selMeeting.id}`)}
+                    className="flex-shrink-0 flex items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition-colors">
                     詳細を開く
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -305,37 +336,37 @@ function MeetingsTab({ pw }: { pw: string }) {
               </div>
               {loadingDetail ? <Spinner /> : (
                 <div className="flex-1 overflow-y-auto p-5 space-y-5">
-                  {selected.summary && (
+                  {selMeeting.summary && (
                     <section>
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">📄 要約</h4>
-                      <p className="text-sm text-gray-700 leading-relaxed">{selected.summary}</p>
+                      <p className="text-sm text-gray-700 leading-relaxed">{selMeeting.summary}</p>
                     </section>
                   )}
-                  {(selected.problems?.length ?? 0) > 0 && (
+                  {(selMeeting.problems?.length ?? 0) > 0 && (
                     <section>
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">⚠️ 問題点</h4>
                       <ul className="space-y-1">
-                        {selected.problems.map((p, i) => (
+                        {selMeeting.problems.map((p, i) => (
                           <li key={i} className="text-sm text-gray-700 flex gap-2"><span className="text-red-400">•</span>{p}</li>
                         ))}
                       </ul>
                     </section>
                   )}
-                  {(selected.improvements?.length ?? 0) > 0 && (
+                  {(selMeeting.improvements?.length ?? 0) > 0 && (
                     <section>
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">💡 改善策</h4>
                       <ul className="space-y-1">
-                        {selected.improvements.map((imp, i) => (
+                        {selMeeting.improvements.map((imp, i) => (
                           <li key={i} className="text-sm text-gray-700 flex gap-2"><span className="text-green-400">•</span>{imp}</li>
                         ))}
                       </ul>
                     </section>
                   )}
-                  {(selected.action_plan?.length ?? 0) > 0 && (
+                  {(selMeeting.action_plan?.length ?? 0) > 0 && (
                     <section>
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">🎯 アクションプラン</h4>
                       <div className="space-y-2">
-                        {selected.action_plan.map((a: ActionItem, i: number) => (
+                        {selMeeting.action_plan.map((a: ActionItem, i: number) => (
                           <div key={i} className="bg-gray-50 rounded-lg p-3">
                             <p className="text-sm font-medium text-gray-800">{a.task}</p>
                             <div className="flex gap-3 mt-1">
@@ -350,10 +381,10 @@ function MeetingsTab({ pw }: { pw: string }) {
                       </div>
                     </section>
                   )}
-                  {selected.transcript && (
+                  {selMeeting.transcript && (
                     <section>
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">📝 文字起こし</h4>
-                      <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{selected.transcript}</p>
+                      <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-3">{selMeeting.transcript}</p>
                     </section>
                   )}
                 </div>
@@ -365,7 +396,7 @@ function MeetingsTab({ pw }: { pw: string }) {
                 <svg className="w-12 h-12 mx-auto mb-3 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
-                <p className="text-sm">会議を選択</p>
+                <p className="text-sm">会社 → メンバー → 会議を選択</p>
               </div>
             </div>
           )}
@@ -530,153 +561,6 @@ function PromptsTab({ pw }: { pw: string }) {
 // ─────────────────────────────────────────────
 // 参加者情報タブ
 // ─────────────────────────────────────────────
-// ─────────────────────────────────────────────
-// 会議詳細モーダル（ParticipantsTab 用）
-// ─────────────────────────────────────────────
-function MeetingDetailModal({
-  meeting,
-  onClose,
-}: {
-  meeting: Meeting;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto"
-      style={{ background: 'rgba(0,0,0,0.45)', padding: '24px 16px' }}
-    >
-      <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl flex flex-col">
-        {/* ヘッダー */}
-        <div className="flex items-start justify-between px-6 py-5 border-b border-gray-100">
-          <div className="flex-1 min-w-0 pr-4">
-            <h2 className="text-lg font-bold text-gray-900 leading-snug">
-              {meeting.title || '（タイトルなし）'}
-            </h2>
-            <div className="flex flex-wrap gap-3 mt-1.5">
-              <span className="text-xs text-gray-400">{fmt(meeting.created_at)}</span>
-              {meeting.company_name && (
-                <span className="text-xs text-gray-400">🏢 {meeting.company_name}</span>
-              )}
-              <span className="text-xs text-gray-400">👤 {meeting.user_name}</span>
-              <span className="text-xs text-gray-400">⏱ {formatDuration(meeting.duration_seconds)}</span>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors flex-shrink-0"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            戻る
-          </button>
-        </div>
-
-        {/* 本文 */}
-        <div className="p-6 space-y-6 overflow-y-auto">
-          {/* 要約 */}
-          {meeting.summary && (
-            <section>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">📄 会議の要約</h3>
-              <p className="text-sm text-gray-700 leading-relaxed bg-gray-50 rounded-xl p-4">{meeting.summary}</p>
-            </section>
-          )}
-
-          {/* 問題点 */}
-          {(meeting.problems?.length ?? 0) > 0 && (
-            <section>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">⚠️ 問題点</h3>
-              <ul className="space-y-1.5">
-                {meeting.problems.map((p, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                    <span className="text-red-400 mt-0.5 flex-shrink-0">•</span>{p}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {/* 改善策 */}
-          {(meeting.improvements?.length ?? 0) > 0 && (
-            <section>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">💡 改善策・コンサルコメント</h3>
-              <ul className="space-y-1.5">
-                {meeting.improvements.map((imp, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
-                    <span className="text-green-500 mt-0.5 flex-shrink-0">•</span>{imp}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          {/* TODOリスト（アクションプラン） */}
-          {(meeting.action_plan?.length ?? 0) > 0 && (
-            <section>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">🎯 TODOリスト（アクションプラン）</h3>
-              <div className="space-y-2">
-                {meeting.action_plan.map((a: ActionItem, i: number) => (
-                  <div key={i} className="bg-gray-50 rounded-xl p-3 flex items-start gap-3">
-                    <span className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${
-                      a.priority === 'high' ? 'bg-red-500' : a.priority === 'medium' ? 'bg-yellow-400' : 'bg-green-400'
-                    }`} />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-800">{a.task}</p>
-                      <div className="flex flex-wrap gap-3 mt-1">
-                        <span className="text-xs text-blue-600">👤 {a.assignee}</span>
-                        <span className="text-xs text-gray-400">📅 {a.deadline}</span>
-                        <span className={`text-xs font-semibold ${
-                          a.priority === 'high' ? 'text-red-500' : a.priority === 'medium' ? 'text-yellow-500' : 'text-green-500'
-                        }`}>
-                          [{a.priority === 'high' ? '高' : a.priority === 'medium' ? '中' : '低'}]
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* 次回会議 */}
-          {meeting.next_meeting && (
-            <section>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">📅 次回会議</h3>
-              <div className="bg-gray-50 rounded-xl p-4 space-y-1">
-                {meeting.next_meeting.suggested_timing && (
-                  <p className="text-sm text-gray-700">提案時期: {meeting.next_meeting.suggested_timing}</p>
-                )}
-                {(meeting.next_meeting.agenda?.length ?? 0) > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {meeting.next_meeting.agenda.map((a, i) => (
-                      <li key={i} className="text-sm text-gray-600 flex gap-2">
-                        <span className="text-blue-400">•</span>{a}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {meeting.next_meeting.notes && (
-                  <p className="text-xs text-gray-400 mt-2">{meeting.next_meeting.notes}</p>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* 文字起こし */}
-          {meeting.transcript && (
-            <section>
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">📝 文字起こし全文</h3>
-              <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-xl p-4">
-                {meeting.transcript}
-              </p>
-            </section>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ParticipantsTab({ pw }: { pw: string }) {
   const router = useRouter();
   const [participants, setParticipants] = useState<Participant[]>([]);

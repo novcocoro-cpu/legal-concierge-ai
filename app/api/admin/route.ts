@@ -44,20 +44,26 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ meeting: data });
     }
 
-    // 全会議一覧 + 統計
-    const { data: meetings, error } = await client
-      .from('meetings')
-      .select('id, user_id, user_name, company_name, title, summary, duration_seconds, created_at, action_plan, problems')
-      .order('created_at', { ascending: false })
-      .limit(500);
+    // 会社・メンバー・会議を一括取得
+    const [companiesRes, membersRes, meetingsRes] = await Promise.all([
+      client.from('companies').select('*').order('name'),
+      client.from('members').select('*').order('name'),
+      client.from('meetings')
+        .select('id, user_id, user_name, company_name, company_id, member_id, title, summary, duration_seconds, created_at, action_plan, problems')
+        .order('created_at', { ascending: false })
+        .limit(500),
+    ]);
 
-    if (error) throw new Error(error.message);
+    if (meetingsRes.error) throw new Error(meetingsRes.error.message);
+
+    const companies = companiesRes.data ?? [];
+    const members   = membersRes.data ?? [];
+    const list      = meetingsRes.data ?? [];
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekStart  = new Date(todayStart.getTime() - 6 * 86400000);
 
-    const list = meetings ?? [];
     const stats = {
       totalMeetings:  list.length,
       todayMeetings:  list.filter(m => new Date(m.created_at) >= todayStart).length,
@@ -65,7 +71,7 @@ export async function GET(req: NextRequest) {
       totalDuration:  list.reduce((s, m) => s + (m.duration_seconds ?? 0), 0),
     };
 
-    return NextResponse.json({ stats, meetings: list });
+    return NextResponse.json({ stats, companies, members, meetings: list });
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
