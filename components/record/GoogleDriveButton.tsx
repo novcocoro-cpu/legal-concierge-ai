@@ -14,7 +14,7 @@ declare global {
       };
     };
     gapi?: {
-      load: (api: string, cb: () => void) => void;
+      load: (api: string, cb: (() => void) | { callback: () => void; onerror: () => void }) => void;
       client: {
         init: (config: { apiKey: string; discoveryDocs: string[] }) => Promise<void>;
         drive: {
@@ -99,11 +99,24 @@ export default function GoogleDriveButton({ disabled, onFileSelected, onError, o
         scope: SCOPES,
         callback: (resp: { access_token?: string; error?: string }) => {
           if (resp.error) {
+            console.error('[GoogleDrive] OAuth error:', resp.error);
             reject(new Error(`OAuth error: ${resp.error}`));
           } else if (resp.access_token) {
+            console.log('[GoogleDrive] OAuth token obtained');
             tokenRef.current = resp.access_token;
             resolve(resp.access_token);
+          } else {
+            console.error('[GoogleDrive] OAuth: no token and no error', resp);
+            reject(new Error('OAuth認証に失敗しました（トークンが取得できません）'));
           }
+        },
+        error_callback: (err: { type: string; message?: string }) => {
+          console.error('[GoogleDrive] OAuth error_callback:', err);
+          reject(new Error(
+            err.type === 'popup_closed'
+              ? '認証ポップアップが閉じられました'
+              : `OAuth error: ${err.type} ${err.message || ''}`
+          ));
         },
       });
       tokenClient.requestAccessToken();
@@ -138,20 +151,35 @@ export default function GoogleDriveButton({ disabled, onFileSelected, onError, o
       ]);
 
       // Picker API ロード
-      await new Promise<void>((resolve) => {
-        window.gapi!.load('picker', resolve);
+      await new Promise<void>((resolve, reject) => {
+        if (!window.gapi) {
+          reject(new Error('Google API (gapi) が読み込まれませんでした'));
+          return;
+        }
+        window.gapi.load('picker', {
+          callback: resolve,
+          onerror: () => reject(new Error('Google Picker API の読み込みに失敗しました')),
+        });
       });
+
+      console.log('[GoogleDrive] Picker API loaded, google.picker:', !!window.google?.picker);
+
+      if (!window.google?.picker) {
+        throw new Error('Google Picker API が利用できません。Google Cloud Console で Picker API を有効にしてください。');
+      }
 
       // OAuth トークン取得
       const accessToken = tokenRef.current || await getOAuthToken();
+      console.log('[GoogleDrive] Building picker...');
 
       // Picker 表示
-      const view = new window.google!.picker.PickerBuilder()
+      const picker = new window.google.picker.PickerBuilder()
         .setOAuthToken(accessToken)
         .setDeveloperKey(GOOGLE_API_KEY)
-        .addView(window.google!.picker.ViewId.DOCS)
+        .addView(window.google.picker.ViewId.DOCS)
         .setTitle('音声ファイルを選択')
         .setCallback(async (data: GooglePickerResult) => {
+          console.log('[GoogleDrive] Picker callback:', data.action);
           if (data.action === window.google!.picker.Action.PICKED && data.docs?.length) {
             const doc = data.docs[0];
 
@@ -172,8 +200,10 @@ export default function GoogleDriveButton({ disabled, onFileSelected, onError, o
         })
         .build();
 
-      view.setVisible(true);
+      picker.setVisible(true);
+      console.log('[GoogleDrive] Picker shown');
     } catch (e) {
+      console.error('[GoogleDrive] Error:', e);
       onError(e instanceof Error ? e.message : 'Google Driveの読み込みに失敗しました');
     }
   }, [onFileSelected, onError, onProgress, getOAuthToken, downloadFile]);
