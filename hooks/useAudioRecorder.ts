@@ -40,7 +40,10 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mimeType = getSupportedMimeType();
-      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const mr = new MediaRecorder(stream, {
+        ...(mimeType ? { mimeType } : {}),
+        audioBitsPerSecond: 16000, // 16kbps — 音声通話品質で十分、ファイルサイズ大幅削減
+      });
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
 

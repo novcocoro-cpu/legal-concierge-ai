@@ -43,6 +43,76 @@ async function getGeminiModel(): Promise<string> {
   }
 }
 
+/** 音声チャンクから文字起こしのみ行う（分割送信用） */
+export async function transcribeAudioOnly(base64Audio: string, mimeType: string): Promise<string> {
+  const model = await getGeminiModel();
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: mimeType, data: base64Audio } },
+            { text: 'この音声を文字起こししてください。話者が複数いる場合は「話者A：」等で区別してください。文字起こし結果のテキストのみを返してください。' }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 8192,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini API error: ${response.status} ${err}`);
+  }
+
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+}
+
+/** テキストから会議分析を行う（チャンク結合後の解析用） */
+export async function analyzeTranscript(transcript: string): Promise<GeminiResult> {
+  const model = await getGeminiModel();
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: `以下は会議の文字起こしです。\n\n${transcript}\n\n${PROMPT}` }
+          ]
+        }],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: 8192,
+          responseMimeType: 'application/json',
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini API error: ${response.status} ${err}`);
+  }
+
+  const data = await response.json();
+  const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+  return JSON.parse(cleaned) as GeminiResult;
+}
+
 export async function analyzeAudio(base64Audio: string, mimeType: string): Promise<GeminiResult> {
   const model = await getGeminiModel();
 

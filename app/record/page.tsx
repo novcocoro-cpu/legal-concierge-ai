@@ -16,6 +16,8 @@ import { GeminiResult } from '@/types';
 import { logError } from '@/lib/logError';
 import MicPermissionGuide from '@/components/record/MicPermissionGuide';
 import { saveRecordingBackup, loadRecordingBackup, clearRecordingBackup } from '@/lib/recordingBackup';
+import { uploadAndTranscribe } from '@/lib/audioUploader';
+import GoogleDriveButton from '@/components/record/GoogleDriveButton';
 
 type Phase = 'idle' | 'recording' | 'analyzing' | 'result';
 
@@ -272,15 +274,13 @@ export default function RecordPage() {
     setStepIndex(0);
     const stepTimer = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 1200);
     try {
-      const formData = new FormData();
-      formData.append('audio', blob, 'recording.webm');
-      const res = await fetch('/api/transcribe', { method: 'POST', body: formData });
+      const data: GeminiResult = await uploadAndTranscribe(blob, (step) => {
+        // 進捗メッセージが来たらステップを進める
+        if (step.includes('文字起こし')) setStepIndex(1);
+        else if (step.includes('解析')) setStepIndex(2);
+      });
       clearInterval(stepTimer);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `文字起こしに失敗しました（HTTPエラー ${res.status}）`);
-      }
-      const data: GeminiResult = await res.json();
+      setStepIndex(STEPS.length - 1);
       setResult(data);
       setPhase('result');
       if (userId) autoSave(data, dur, userId, userName || '名無し', companyName);
@@ -436,6 +436,34 @@ export default function RecordPage() {
           <p style={{ color: 'var(--muted)' }} className="text-sm text-center">
             ボタンを押して録音を開始
           </p>
+
+          {/* Google ドライブから読み込み */}
+          <div className="w-full max-w-xs">
+            <div className="flex items-center gap-3 my-1">
+              <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+              <span style={{ color: 'var(--muted)' }} className="text-xs">または</span>
+              <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+            </div>
+            <GoogleDriveButton
+              disabled={false}
+              onFileSelected={(blob, fileName) => {
+                // Google Drive から取得したファイルを文字起こし
+                const ext = fileName.split('.').pop()?.toLowerCase() || 'webm';
+                const mimeMap: Record<string, string> = {
+                  mp3: 'audio/mpeg', mp4: 'video/mp4', m4a: 'audio/mp4',
+                  wav: 'audio/wav', ogg: 'audio/ogg', webm: 'audio/webm',
+                  flac: 'audio/flac', aac: 'audio/aac',
+                };
+                const mime = mimeMap[ext] || blob.type || 'audio/webm';
+                const typedBlob = new Blob([blob], { type: mime });
+                analyzeBlob(typedBlob, 0);
+              }}
+              onError={(msg) => showError(msg)}
+              onProgress={(step) => {
+                // Google Drive の進捗は analyzing フェーズに入る前に表示
+              }}
+            />
+          </div>
         </div>
       )}
 
