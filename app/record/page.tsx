@@ -18,6 +18,7 @@ import MicPermissionGuide from '@/components/record/MicPermissionGuide';
 import { saveRecordingBackup, loadRecordingBackup, clearRecordingBackup } from '@/lib/recordingBackup';
 import { uploadAndTranscribe } from '@/lib/audioUploader';
 import GoogleDriveButton from '@/components/record/GoogleDriveButton';
+import { createSupabaseBrowser } from '@/lib/supabase-browser';
 
 type Phase = 'idle' | 'recording' | 'analyzing' | 'result';
 
@@ -170,6 +171,8 @@ export default function RecordPage() {
   const [result, setResult]         = useState<GeminiResult | null>(null);
   const [durationSec, setDurationSec] = useState(0);
   const [audioBlob, setAudioBlob]   = useState<Blob | null>(null);
+  const [audioSavedToStorage, setAudioSavedToStorage] = useState(false);
+  const isSupabaseAvailable = typeof window !== 'undefined' && !!createSupabaseBrowser();
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg]     = useState<string | null>(null);
   const [nameInput, setNameInput]     = useState('');
@@ -285,6 +288,24 @@ export default function RecordPage() {
       setStepIndex(STEPS.length - 1);
       setResult(data);
       setPhase('result');
+      // Supabase接続時は音声をStorageに永続保存
+      if (isSupabaseAvailable) {
+        try {
+          const sb = createSupabaseBrowser();
+          if (sb) {
+            const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            const caseName = (data.title ?? '案件').replace(/[\\/:*?"<>|]/g, '_').slice(0, 30);
+            const audioPath = `recordings/${date}_${caseName}_${Date.now()}.webm`;
+            await sb.storage.from('audio-uploads').upload(audioPath, blob, {
+              contentType: blob.type || 'audio/webm',
+              upsert: true,
+            });
+            setAudioSavedToStorage(true);
+          }
+        } catch {
+          // Storage保存失敗はサイレントに無視（ダウンロードで代替可能）
+        }
+      }
       if (userId) autoSave(data, dur, userId, userName || '名無し', companyName);
     } catch (e) {
       clearInterval(stepTimer);
@@ -583,30 +604,44 @@ export default function RecordPage() {
           <NextMeetingCard data={result.next_meeting} />
 
           {audioBlob && (
-            <button
-              onClick={() => {
-                const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-                const caseName = (result?.title ?? '案件').replace(/[\\/:*?"<>|]/g, '_').slice(0, 30);
-                const fileName = `${date}_${caseName}.mp3`;
-                const url = URL.createObjectURL(audioBlob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = fileName;
-                a.click();
-                URL.revokeObjectURL(url);
-              }}
-              className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
-              style={{ background: 'var(--accent)', color: '#fff' }}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
-              録音データをダウンロード
-            </button>
+            <div className="flex flex-col gap-2">
+              {audioSavedToStorage && (
+                <div className="flex items-center justify-center gap-2 py-2 rounded-xl text-sm"
+                  style={{ background: 'var(--surface)', border: '1px solid var(--success)', color: 'var(--success)' }}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  クラウドに保存済み
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                  const caseName = (result?.title ?? '案件').replace(/[\\/:*?"<>|]/g, '_').slice(0, 30);
+                  const fileName = `${date}_${caseName}.mp3`;
+                  const url = URL.createObjectURL(audioBlob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = fileName;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+                style={audioSavedToStorage
+                  ? { background: 'var(--surface)', color: 'var(--text)', border: '1px solid var(--border)' }
+                  : { background: 'var(--accent)', color: '#fff' }
+                }
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {audioSavedToStorage ? '端末にもダウンロード' : '録音データを端末にダウンロード'}
+              </button>
+            </div>
           )}
 
           <button
-            onClick={() => { setPhase('idle'); setResult(null); setAudioBlob(null); }}
+            onClick={() => { setPhase('idle'); setResult(null); setAudioBlob(null); setAudioSavedToStorage(false); }}
             className="w-full py-3 rounded-xl text-sm font-medium"
             style={{ background: 'var(--surface2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
           >
