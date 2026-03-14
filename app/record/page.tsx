@@ -510,12 +510,12 @@ function ResultView({ result, caseNameInput, durationSec, audioBlob, copied, onC
         {/* 法的論点・争点 */}
         <ResultSection dotColor="#E24B4A" name="法的論点・争点"
           badge={result.problems?.length?<span className="risk-badge rb-high">要対応</span>:undefined}>
-          {result.problems?.map((p,i)=><span key={i}>{'① ②③④⑤⑥⑦⑧⑨⑩'.charAt(i)||'•'} {p}<br/></span>)}
+          {result.problems?.map((p,i)=><span key={i}>{'①②③④⑤⑥⑦⑧⑨⑩'[i]||'•'} {p}<br/></span>)}
         </ResultSection>
 
         {/* 対応方針 */}
         <ResultSection dotColor="#BA7517" name="対応方針">
-          {result.improvements?.map((imp,i)=><span key={i}>{'① ②③④⑤⑥⑦⑧⑨⑩'.charAt(i)||'•'} {imp}<br/></span>)}
+          {result.improvements?.map((imp,i)=><span key={i}>{'①②③④⑤⑥⑦⑧⑨⑩'[i]||'•'} {imp}<br/></span>)}
         </ResultSection>
 
         {/* 訴訟リスク評価 */}
