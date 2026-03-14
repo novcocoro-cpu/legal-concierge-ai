@@ -292,9 +292,17 @@ export default function RecordPage() {
   }
 
   // ══════════════════════════════════════
-  // Main render
+  // Result view — early return (different shell)
   // ══════════════════════════════════════
-  const isRec = phase === 'recording';
+  if (phase === 'result' && result) return <ResultView
+    result={result} caseNameInput={caseNameInput} durationSec={durationSec} audioBlob={audioBlob}
+    copied={copied} onCopy={handleCopy} onDownloadAudio={handleDownloadAudio} onDownloadWord={()=>downloadDocx(result)}
+    onNewSession={()=>{setPhase('idle');setResult(null);setAudioBlob(null);setCaseNameInput('');}}
+  />;
+
+  // ══════════════════════════════════════
+  // Main render (recording shell)
+  // ══════════════════════════════════════
   const totalSec = limitMin * 60;
   const remaining = Math.max(0, totalSec - seconds);
   const progress = Math.min(1, seconds / totalSec);
@@ -408,119 +416,160 @@ export default function RecordPage() {
           </div>
         )}
 
-        {/* ──── RESULT ──── */}
-        {phase==='result'&&result&&(
-          <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            {/* Title card */}
-            <div className="card-legal" style={{padding:16}}>
-              <h2 style={{fontFamily:"'Noto Serif JP',serif",fontSize:17,color:'var(--gold2)',fontWeight:600,marginBottom:4}}>{result.title}</h2>
-              <p style={{fontSize:11,color:'var(--text-muted)',fontFamily:'JetBrains Mono,monospace'}}>
-                {new Date().toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric'})}
-                {caseNameInput&&<span style={{marginLeft:8,color:'var(--gold)'}}>| {caseNameInput}</span>}
-              </p>
-            </div>
+      </div>
+      <BottomNav/>
+    </div>
+  );
+}
 
-            <TranscriptAccordion transcript={result.transcript}/>
+// ══════════════════════════════════════════
+// Result View Component (cream / light theme)
+// ══════════════════════════════════════════
+function ResultSection({ dotColor, name, badge, children, defaultOpen=true }:
+  { dotColor:string; name:string; badge?:React.ReactNode; children?:React.ReactNode; defaultOpen?:boolean }) {
+  const [open,setOpen] = useState(defaultOpen);
+  return (
+    <div className="rsec">
+      <div className="rsec-head" onClick={()=>setOpen(!open)}>
+        <div className="rsec-dot" style={{background:dotColor}}/>
+        <div className="rsec-name">{name}</div>
+        {badge}
+        <svg className={`rsec-arrow ${open?'open':''}`} viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      {open && children && <div className="rsec-body">{children}</div>}
+    </div>
+  );
+}
 
-            <ResultCard title="相談内容の要約" icon="📄">
-              <p style={{color:'var(--text-primary)',fontSize:13,lineHeight:1.7}}>{result.summary}</p>
-            </ResultCard>
+function ResultView({ result, caseNameInput, durationSec, audioBlob, copied, onCopy, onDownloadAudio, onDownloadWord, onNewSession }:
+  { result:GeminiResult; caseNameInput:string; durationSec:number; audioBlob:Blob|null;
+    copied:boolean; onCopy:()=>void; onDownloadAudio:()=>void; onDownloadWord:()=>void; onNewSession:()=>void }) {
+  const durMin = pad2(Math.floor(durationSec/60));
+  const durSec = pad2(durationSec%60);
+  const PRIORITY_JA:Record<string,string> = {high:'高',medium:'中',low:'低'};
+  const riskLevel = result.litigation_risk?.level;
+  const riskBadgeClass = riskLevel==='高'?'rb-high':riskLevel==='中'?'rb-mid':'rb-low';
+  const riskBadgeText = riskLevel==='高'?'要対応':riskLevel==='中'?'中リスク':'低リスク';
 
-            <ResultCard title="法的論点・争点" icon="⚠️">
-              <ul style={{display:'flex',flexDirection:'column',gap:6}}>
-                {result.problems?.map((p,i)=>(
-                  <li key={i} style={{color:'var(--text-primary)',fontSize:13,display:'flex',alignItems:'flex-start',gap:8}}>
-                    <span style={{color:'var(--danger)'}}>•</span>{p}
-                  </li>
-                ))}
-              </ul>
-            </ResultCard>
-
-            <ResultCard title="対応方針" icon="💡">
-              <ul style={{display:'flex',flexDirection:'column',gap:6}}>
-                {result.improvements?.map((imp,i)=>(
-                  <li key={i} style={{color:'var(--text-primary)',fontSize:13,display:'flex',alignItems:'flex-start',gap:8}}>
-                    <span style={{color:'var(--success)'}}>•</span>{imp}
-                  </li>
-                ))}
-              </ul>
-            </ResultCard>
-
-            {result.litigation_risk&&(
-              <ResultCard title="訴訟リスク評価" icon="🔥">
-                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  <div style={{display:'flex',alignItems:'center',gap:8}}>
-                    <span style={{fontSize:11,fontWeight:700,padding:'2px 10px',borderRadius:20,color:'#fff',
-                      background:result.litigation_risk.level==='高'?'var(--danger)':result.litigation_risk.level==='中'?'var(--warning)':'var(--success)'}}>
-                      {result.litigation_risk.level}
-                    </span>
-                    <span style={{color:'var(--text-primary)',fontSize:13}}>{result.litigation_risk.description}</span>
-                  </div>
-                  <ul style={{display:'flex',flexDirection:'column',gap:4}}>
-                    {result.litigation_risk.factors?.map((f,i)=>(
-                      <li key={i} style={{color:'var(--text-primary)',fontSize:13,display:'flex',alignItems:'flex-start',gap:8}}>
-                        <span style={{color:'var(--warning)'}}>•</span>{f}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </ResultCard>
-            )}
-
-            {result.negotiation_strategy&&(
-              <ResultCard title="交渉戦略・心理的分析" icon="🧠">
-                <div style={{display:'flex',flexDirection:'column',gap:8}}>
-                  <div><p style={{fontSize:10,color:'var(--text-muted)',marginBottom:2}}>戦略</p><p style={{color:'var(--text-primary)',fontSize:13}}>{result.negotiation_strategy.approach}</p></div>
-                  <div><p style={{fontSize:10,color:'var(--text-muted)',marginBottom:2}}>心理的分析</p><p style={{color:'var(--text-primary)',fontSize:13}}>{result.negotiation_strategy.psychological_notes}</p></div>
-                  <ul style={{display:'flex',flexDirection:'column',gap:4}}>
-                    {result.negotiation_strategy.key_points?.map((kp,i)=>(
-                      <li key={i} style={{color:'var(--text-primary)',fontSize:13,display:'flex',alignItems:'flex-start',gap:8}}>
-                        <span style={{color:'var(--gold)'}}>•</span>{kp}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </ResultCard>
-            )}
-
-            <ResultCard title="宿題事項・期日" icon="🎯">
-              <ActionPlanList items={result.action_plan}/>
-            </ResultCard>
-            <NextMeetingCard data={result.next_meeting}/>
-
-            {/* ── 3 export buttons ── */}
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>downloadDocx(result)} style={{flex:1,padding:'10px 0',borderRadius:10,fontSize:12,fontWeight:600,
-                background:'var(--navy2)',color:'var(--gold2)',border:'1px solid var(--gold-border)',cursor:'pointer',letterSpacing:'0.05em',
-                fontFamily:"'Noto Sans JP',sans-serif",transition:'all 0.2s'}}>
-                📄 Word
-              </button>
-              <button onClick={handleCopy} style={{flex:1,padding:'10px 0',borderRadius:10,fontSize:12,fontWeight:600,
-                background:copied?'var(--success)':'var(--navy2)',color:copied?'#fff':'var(--text-primary)',
-                border:`1px solid ${copied?'var(--success)':'var(--gold-border)'}`,cursor:'pointer',letterSpacing:'0.05em',
-                fontFamily:"'Noto Sans JP',sans-serif",transition:'all 0.2s'}}>
-                {copied?'✓ コピー済み':'📋 コピー'}
-              </button>
-              <button onClick={handleDownloadAudio} disabled={!audioBlob}
-                style={{flex:1,padding:'10px 0',borderRadius:10,fontSize:12,fontWeight:600,
-                  background:'linear-gradient(145deg,var(--gold2),#a8832e)',color:'var(--navy)',border:'none',cursor:'pointer',
-                  opacity:audioBlob?1:0.4,letterSpacing:'0.05em',fontFamily:"'Noto Sans JP',sans-serif",transition:'all 0.2s'}}>
-                🎙 音声
-              </button>
-            </div>
-
-            <button onClick={()=>{setPhase('idle');setResult(null);setAudioBlob(null);setCaseNameInput('');}}
-              style={{width:'100%',padding:'10px 0',borderRadius:10,fontSize:12,
-                background:'transparent',color:'var(--text-muted)',border:'1px solid var(--gold-border)',cursor:'pointer',
-                fontFamily:"'Noto Sans JP',sans-serif",letterSpacing:'0.05em'}}>
-              新しいヒアリングを開始
-            </button>
+  return (
+    <div className="result-shell">
+      {/* Header */}
+      <div className="result-header">
+        <div className="result-header-top">
+          <div className="result-header-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" strokeWidth="2" strokeLinecap="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+            </svg>
           </div>
-        )}
+          <div className="result-header-title">法務コンシェルジュ 分析結果</div>
+        </div>
+        <div className="result-header-meta">
+          {new Date().toLocaleDateString('ja-JP',{year:'numeric',month:'long',day:'numeric'})}
+          &nbsp;|&nbsp;録音時間 {durMin}:{durSec}
+        </div>
       </div>
 
-      {/* ── Bottom Nav ── */}
-      <BottomNav/>
+      {/* Body */}
+      <div className="result-body">
+        {(caseNameInput||result.title) && (
+          <div className="result-case-tag">案件：{caseNameInput||result.title}</div>
+        )}
+
+        {/* 相談内容の要約 */}
+        <ResultSection dotColor="#1D9E75" name="相談内容の要約">
+          {result.summary}
+        </ResultSection>
+
+        {/* 法的論点・争点 */}
+        <ResultSection dotColor="#E24B4A" name="法的論点・争点"
+          badge={result.problems?.length?<span className="risk-badge rb-high">要対応</span>:undefined}>
+          {result.problems?.map((p,i)=><span key={i}>{'① ②③④⑤⑥⑦⑧⑨⑩'.charAt(i)||'•'} {p}<br/></span>)}
+        </ResultSection>
+
+        {/* 対応方針 */}
+        <ResultSection dotColor="#BA7517" name="対応方針">
+          {result.improvements?.map((imp,i)=><span key={i}>{'① ②③④⑤⑥⑦⑧⑨⑩'.charAt(i)||'•'} {imp}<br/></span>)}
+        </ResultSection>
+
+        {/* 訴訟リスク評価 */}
+        {result.litigation_risk && (
+          <ResultSection dotColor="#BA7517" name="訴訟リスク評価"
+            badge={<span className={`risk-badge ${riskBadgeClass}`}>{riskBadgeText}</span>}>
+            {result.litigation_risk.description}
+            {result.litigation_risk.factors?.map((f,i)=><span key={i}><br/>• {f}</span>)}
+          </ResultSection>
+        )}
+
+        {/* 交渉戦略・心理的分析 */}
+        {result.negotiation_strategy && (
+          <ResultSection dotColor="#185FA5" name="交渉戦略・心理的分析" defaultOpen={false}>
+            <strong>戦略：</strong>{result.negotiation_strategy.approach}<br/>
+            <strong>心理的分析：</strong>{result.negotiation_strategy.psychological_notes}
+            {result.negotiation_strategy.key_points?.map((kp,i)=><span key={i}><br/>• {kp}</span>)}
+          </ResultSection>
+        )}
+
+        {/* 宿題事項・期日 */}
+        <ResultSection dotColor="#534AB7" name="宿題事項・期日">
+          <div style={{padding:0,background:'transparent'}}>
+            {result.action_plan?.map((a,i)=>(
+              <div className="rtask" key={i}>
+                <div className="rtask-num">{i+1}</div>
+                <div>
+                  <div className="rtask-title">{a.task}</div>
+                  <div className="rtask-meta">
+                    <span className="rtask-tag">{a.assignee}</span>
+                    <span className="rtask-tag">{a.deadline}</span>
+                    {a.priority==='high'&&<span className="rtask-tag high">{PRIORITY_JA[a.priority]}</span>}
+                  </div>
+                </div>
+              </div>
+            ))}
+            {(!result.action_plan||result.action_plan.length===0)&&<span style={{color:'#6b7a9a',fontSize:12}}>宿題事項なし</span>}
+          </div>
+        </ResultSection>
+
+        {/* 次回期日の提案 */}
+        {result.next_meeting && (
+          <ResultSection dotColor="#0F6E56" name="次回期日の提案">
+            次回期日：<strong>{result.next_meeting.suggested_timing}</strong>
+            {result.next_meeting.agenda?.map((a,i)=><span key={i}><br/>検討事項：{a}</span>)}
+            {result.next_meeting.notes&&<><br/>{result.next_meeting.notes}</>}
+          </ResultSection>
+        )}
+
+        {/* 文字起こし */}
+        <ResultSection dotColor="#6b7a9a" name="文字起こし全文" defaultOpen={false}>
+          <span style={{whiteSpace:'pre-wrap'}}>{result.transcript||'（文字起こしなし）'}</span>
+        </ResultSection>
+
+        {/* New session button */}
+        <button onClick={onNewSession}
+          style={{width:'100%',padding:'10px 0',borderRadius:8,fontSize:12,
+            background:'#ffffff',color:'#6b7a9a',border:'1px solid #e6dfd2',cursor:'pointer',
+            fontFamily:"'Noto Sans JP',sans-serif",letterSpacing:'0.05em',marginTop:4}}>
+          新しいヒアリングを開始
+        </button>
+      </div>
+
+      {/* Action bar */}
+      <div className="result-action-bar">
+        <button className="rbtn-word" onClick={onDownloadWord}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+          </svg>
+          Word 出力
+        </button>
+        <button className={`rbtn-copy ${copied?'copied':''}`} onClick={onCopy}>
+          {copied?'✓ コピー済':'コピー'}
+        </button>
+        <button className="rbtn-audio" onClick={onDownloadAudio} disabled={!audioBlob} style={{opacity:audioBlob?1:0.4}}>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          </svg>
+          音声 DL
+        </button>
+      </div>
     </div>
   );
 }
