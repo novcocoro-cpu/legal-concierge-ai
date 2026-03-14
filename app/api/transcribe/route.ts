@@ -35,21 +35,22 @@ export async function POST(req: NextRequest) {
     const { storagePath, audioBase64, mimeType } = body;
     const mime = mimeType || 'audio/webm';
 
-    // パターン1: Supabase Storage 経由
+    // パターン1: Supabase Storage 経由（パブリックURL）
     if (storagePath) {
       const supabase = createServerClient();
       if (!supabase) {
         return NextResponse.json({ error: 'Supabase が設定されていません' }, { status: 500 });
       }
-      const { data, error } = await supabase.storage
+      const { data: urlData } = supabase.storage
         .from(STORAGE_BUCKET)
-        .download(storagePath);
+        .getPublicUrl(storagePath);
 
-      if (error || !data) {
-        throw new Error(`Storage download error: ${error?.message}`);
+      const res = await fetch(urlData.publicUrl);
+      if (!res.ok) {
+        throw new Error(`Storage download error: ${res.status} ${res.statusText}`);
       }
 
-      const arrayBuffer = await data.arrayBuffer();
+      const arrayBuffer = await res.arrayBuffer();
       const result = await processAudio(arrayBuffer, mime);
       return NextResponse.json(result);
     }
