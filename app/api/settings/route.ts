@@ -19,6 +19,9 @@ export async function GET(req: NextRequest) {
   try {
     const { createServerClient } = await import('@/lib/supabase');
     const client = createServerClient();
+    if (!client) {
+      return NextResponse.json({ value: null });
+    }
     const { data } = await client
       .from('システム設定')
       .select('設定値')

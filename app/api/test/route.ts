@@ -4,6 +4,14 @@ import { NextResponse } from 'next/server';
 export async function GET() {
   try {
     const supabase = createServerClient();
+    if (!supabase) {
+      return NextResponse.json({
+        ok: true,
+        data: null,
+        error: 'Supabase未接続（環境変数未設定）',
+        supabaseUrl: null,
+      });
+    }
     const { data, error } = await supabase.from('meetings').select('count');
     return NextResponse.json({
       ok: !error,

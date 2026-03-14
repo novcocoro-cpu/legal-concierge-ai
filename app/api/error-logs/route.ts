@@ -2,7 +2,6 @@
 // エラーログ API
 // POST /api/error-logs        → エラーログを保存（認証不要）
 // GET  /api/error-logs        → エラーログ一覧を取得（管理者のみ）
-// GET  /api/error-logs?search=xxx → エラー内容で絞り込み
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -23,6 +22,10 @@ export async function POST(req: NextRequest) {
 
     const { createServerClient } = await import('@/lib/supabase');
     const client = createServerClient();
+    if (!client) {
+      // Supabase 未接続時はサイレントに成功を返す
+      return NextResponse.json({ ok: true });
+    }
 
     const { error } = await client.from('error_logs').insert({
       error_message: String(error_message).slice(0, 2000),
@@ -37,7 +40,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    // ログ保存エラーは500で返すが、クライアントでは無視してOK
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }
 }
@@ -47,12 +49,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
   }
 
-  const { searchParams } = new URL(req.url);
-  const search = searchParams.get('search') ?? '';
-
   try {
     const { createServerClient } = await import('@/lib/supabase');
     const client = createServerClient();
+    if (!client) {
+      return NextResponse.json({ logs: [] });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const search = searchParams.get('search') ?? '';
 
     let query = client
       .from('error_logs')

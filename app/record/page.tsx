@@ -24,8 +24,8 @@ type Phase = 'idle' | 'recording' | 'analyzing' | 'result';
 const STEPS = ['音声変換中…', '文字起こし中…', '解析中…', '解析完了！'];
 
 // 録音時間の選択肢（分）
-const DURATION_OPTIONS = [10, 30, 60] as const;
-const DEFAULT_LIMIT_MIN = 30;
+const DURATION_OPTIONS = [30, 60, 90, 120] as const;
+const DEFAULT_LIMIT_MIN = 60;
 // チャンク保存間隔（ミリ秒）
 const CHUNK_SAVE_INTERVAL_MS = 5 * 60 * 1000;
 

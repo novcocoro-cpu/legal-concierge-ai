@@ -8,6 +8,7 @@ export async function PUT(req: NextRequest) {
     const { userId, userName, companyName } = await req.json();
     if (!userId || !userName) return NextResponse.json({ error: 'userId と userName は必須です' }, { status: 400 });
     const client = createServerClient();
+    if (!client) return NextResponse.json({ ok: true, user: null });
     const row = {
       'ユーザーID': userId,
       'ユーザー名': userName,

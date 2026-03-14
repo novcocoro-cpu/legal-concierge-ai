@@ -9,9 +9,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'userId is required' }, { status: 400 });
   }
 
-  try {
-    const supabase = createServerClient();
+  const supabase = createServerClient();
+  if (!supabase) {
+    return meetingId
+      ? NextResponse.json(null)
+      : NextResponse.json([]);
+  }
 
+  try {
     // 単件取得
     if (meetingId) {
       const { data, error } = await supabase
@@ -45,7 +50,7 @@ export async function GET(req: NextRequest) {
 }
 
 // 会社を検索 or 作成して id を返す
-async function resolveCompanyId(supabase: ReturnType<typeof createServerClient>, companyName: string): Promise<string | null> {
+async function resolveCompanyId(supabase: NonNullable<ReturnType<typeof createServerClient>>, companyName: string): Promise<string | null> {
   const name = companyName.trim() || '個人 / 未設定';
   const { data: existing } = await supabase
     .from('companies').select('id').eq('name', name).maybeSingle();
@@ -56,7 +61,7 @@ async function resolveCompanyId(supabase: ReturnType<typeof createServerClient>,
 }
 
 // メンバーを検索 or 作成して id を返す
-async function resolveMemberId(supabase: ReturnType<typeof createServerClient>, companyId: string, memberName: string): Promise<string | null> {
+async function resolveMemberId(supabase: NonNullable<ReturnType<typeof createServerClient>>, companyId: string, memberName: string): Promise<string | null> {
   const name = memberName.trim() || '名無し';
   const { data: existing } = await supabase
     .from('members').select('id').eq('company_id', companyId).eq('name', name).maybeSingle();
@@ -67,9 +72,13 @@ async function resolveMemberId(supabase: ReturnType<typeof createServerClient>, 
 }
 
 export async function POST(req: NextRequest) {
+  const supabase = createServerClient();
+  if (!supabase) {
+    return NextResponse.json({ message: 'Supabase未接続のため保存をスキップしました' });
+  }
+
   try {
     const body = await req.json();
-    const supabase = createServerClient();
 
     // 会社・メンバーを自動解決
     const companyId = await resolveCompanyId(supabase, body.company_name ?? '');
@@ -103,8 +112,12 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'id and userId are required' }, { status: 400 });
   }
 
+  const supabase = createServerClient();
+  if (!supabase) {
+    return NextResponse.json({ error: 'Supabase未接続です' }, { status: 500 });
+  }
+
   try {
-    const supabase = createServerClient();
     const { error } = await supabase
       .from('meetings')
       .delete()

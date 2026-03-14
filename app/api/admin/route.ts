@@ -32,6 +32,13 @@ export async function GET(req: NextRequest) {
   const { createServerClient } = await import('@/lib/supabase');
   const client = createServerClient();
 
+  if (!client) {
+    return NextResponse.json({
+      stats: { totalMeetings: 0, todayMeetings: 0, weekMeetings: 0, totalDuration: 0 },
+      companies: [], members: [], meetings: [],
+    });
+  }
+
   try {
     // 特定会議の詳細
     if (meetingId) {

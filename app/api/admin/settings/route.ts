@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   if (!auth(req)) return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
   try {
     const client = await getClient();
+    if (!client) return NextResponse.json({ settings: [] });
     const { data, error } = await client.from(TABLE).select('*');
     if (error) throw new Error(error.message);
     return NextResponse.json({ settings: data ?? [] });
@@ -36,6 +37,7 @@ export async function PUT(req: NextRequest) {
     const value = body['設定値'] as string | undefined;
     if (!key || value === undefined || value === '') return NextResponse.json({ error: '設定キーと設定値は必須です' }, { status: 400 });
     const client = await getClient();
+    if (!client) return NextResponse.json({ error: 'Supabase未接続です' }, { status: 500 });
     const row = { '設定キー': key, '設定値': value, '更新日時': new Date().toISOString() };
     const { data, error } = await client.from(TABLE).upsert(row as never).select().single();
     if (error) throw new Error(error.message);

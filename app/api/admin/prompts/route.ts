@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   if (!auth(req)) return NextResponse.json({ error: '認証が必要です' }, { status: 401 });
   try {
     const client = await getClient();
+    if (!client) return NextResponse.json({ prompts: [] });
     const { data, error } = await client.from(TABLE).select('*').order('作成日時', { ascending: false });
     if (error) throw new Error(error.message);
     return NextResponse.json({ prompts: data ?? [] });
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
     const { タイトル, プロンプト本文, 有効フラグ = true } = body;
     if (!タイトル || !プロンプト本文) return NextResponse.json({ error: 'タイトルと本文は必須です' }, { status: 400 });
     const client = await getClient();
+    if (!client) return NextResponse.json({ error: 'Supabase未接続です' }, { status: 500 });
     const { data, error } = await client.from(TABLE).insert({ タイトル, プロンプト本文, 有効フラグ }).select().single();
     if (error) throw new Error(error.message);
     return NextResponse.json({ prompt: data });
@@ -50,6 +52,7 @@ export async function PUT(req: NextRequest) {
     const { プロンプトID, ...fields } = body;
     if (!プロンプトID) return NextResponse.json({ error: 'IDが必要です' }, { status: 400 });
     const client = await getClient();
+    if (!client) return NextResponse.json({ error: 'Supabase未接続です' }, { status: 500 });
     const { data, error } = await client.from(TABLE).update({ ...fields, 更新日時: new Date().toISOString() }).eq('プロンプトID', プロンプトID).select().single();
     if (error) throw new Error(error.message);
     return NextResponse.json({ prompt: data });
@@ -64,6 +67,7 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'IDが必要です' }, { status: 400 });
   try {
     const client = await getClient();
+    if (!client) return NextResponse.json({ error: 'Supabase未接続です' }, { status: 500 });
     const { error } = await client.from(TABLE).delete().eq('プロンプトID', id);
     if (error) throw new Error(error.message);
     return NextResponse.json({ ok: true });
