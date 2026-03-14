@@ -4,7 +4,7 @@ import { createServerClient } from '@/lib/supabase';
 
 export const maxDuration = 120;
 
-const STORAGE_BUCKET = 'audio-uploads';
+const STORAGE_BUCKET = 'legal-audio';
 // Gemini inline_data 上限を考慮し、raw 8MB 超は分割して文字起こし
 const CHUNK_RAW_SIZE = 8 * 1024 * 1024;
 

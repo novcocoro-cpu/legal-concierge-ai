@@ -3,12 +3,12 @@
 import { createSupabaseBrowser } from '@/lib/supabase-browser';
 import { GeminiResult } from '@/types';
 
-const STORAGE_BUCKET = 'audio-uploads';
+const STORAGE_BUCKET = 'legal-audio';
 
 /**
  * 音声 Blob を文字起こし・解析する。
- * Supabase が設定されている場合は Storage 経由、
- * 未設定の場合は base64 で直接 API に送信する。
+ * 1) Supabase Storage経由を試行
+ * 2) 失敗時はbase64で直接API送信にフォールバック
  */
 export async function uploadAndTranscribe(
   blob: Blob,
@@ -16,46 +16,46 @@ export async function uploadAndTranscribe(
 ): Promise<GeminiResult> {
   const supabase = createSupabaseBrowser();
 
-  // Supabase が利用可能な場合は Storage 経由
+  // Supabase Storage経由を試行
   if (supabase) {
-    const filename = `recording_${Date.now()}.webm`;
-    const storagePath = `recordings/${filename}`;
-
-    onProgress?.('Supabase Storageにアップロード中…');
-
-    const { error: uploadError } = await supabase.storage
-      .from(STORAGE_BUCKET)
-      .upload(storagePath, blob, {
-        contentType: blob.type || 'audio/webm',
-        upsert: true,
-      });
-
-    if (uploadError) {
-      throw new Error(`Supabase Storageアップロードエラー: ${uploadError.message}`);
-    }
-
     try {
-      onProgress?.('文字起こし中…');
+      const filename = `recording_${Date.now()}.webm`;
+      const storagePath = `recordings/${filename}`;
 
-      const res = await fetch('/api/transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storagePath, mimeType: blob.type || 'audio/webm' }),
-      });
+      onProgress?.('音声をアップロード中…');
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `文字起こしエラー（HTTPエラー ${res.status}）`);
+      const { error: uploadError } = await supabase.storage
+        .from(STORAGE_BUCKET)
+        .upload(storagePath, blob, {
+          contentType: blob.type || 'audio/webm',
+          upsert: true,
+        });
+
+      if (uploadError) throw new Error(uploadError.message);
+
+      try {
+        onProgress?.('文字起こし中…');
+        const res = await fetch('/api/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storagePath, mimeType: blob.type || 'audio/webm' }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `HTTPエラー ${res.status}`);
+        }
+        onProgress?.('解析完了！');
+        return res.json();
+      } finally {
+        supabase.storage.from(STORAGE_BUCKET).remove([storagePath]).catch(() => {});
       }
-
-      onProgress?.('解析完了！');
-      return res.json();
-    } finally {
-      supabase.storage.from(STORAGE_BUCKET).remove([storagePath]).catch(() => {});
+    } catch (storageErr) {
+      // Storage失敗 → base64フォールバックに落ちる
+      console.warn('Storage経由失敗、base64にフォールバック:', storageErr);
     }
   }
 
-  // Supabase 未設定の場合は base64 で直接送信
+  // base64で直接送信（フォールバック）
   onProgress?.('音声データを変換中…');
   const arrayBuffer = await blob.arrayBuffer();
   const base64 = btoa(
@@ -63,7 +63,6 @@ export async function uploadAndTranscribe(
   );
 
   onProgress?.('文字起こし中…');
-
   const res = await fetch('/api/transcribe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
