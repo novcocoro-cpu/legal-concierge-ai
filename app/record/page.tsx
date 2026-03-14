@@ -185,8 +185,35 @@ export default function RecordPage() {
   const autoSave = async (data:GeminiResult, dur:number) => {
     if(savingRef.current) return; savingRef.current=true;
     try {
+      // localStorage保存（フォールバック）
       saveToHistory({ title:data.title, caseName:caseNameInput||data.title, result:data, durationSec:dur,
         userName:userName||'名無し', companyName:companyName||'' });
+
+      // Supabase legal_hearings に保存
+      try {
+        // firm取得/作成
+        const firmRes = await fetch('/api/legal/firms', { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ name: companyName || '未設定' }) });
+        const firm = await firmRes.json();
+        // user取得/作成
+        const userRes = await fetch('/api/legal/users', { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ firm_id: firm.id, name: userName || '名無し' }) });
+        const user = await userRes.json();
+        // hearing保存
+        await fetch('/api/legal/hearings', { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            firm_id: firm.id, user_id: user.id,
+            case_name: caseNameInput || data.title,
+            transcript: data.transcript, summary: data.summary,
+            legal_points: data.problems?.join('\n') || '',
+            risk_level: data.litigation_risk?.level || '',
+            strategy: data.negotiation_strategy ? JSON.stringify(data.negotiation_strategy) : '',
+            tasks: data.action_plan || [],
+            next_date: data.next_meeting?.suggested_timing || '',
+          })
+        });
+      } catch { /* Supabase保存失敗はサイレントに無視 */ }
+
       showSuccess('相談記録を保存しました');
       await clearRecordingBackup(); setBackup(null);
     } catch(e){ const msg=e instanceof Error?e.message:'保存に失敗しました'; showError(`保存エラー: ${msg}`); logError(msg,'保存');
