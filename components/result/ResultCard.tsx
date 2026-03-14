@@ -8,17 +8,10 @@ interface ResultCardProps {
 
 export default function ResultCard({ title, icon, children }: ResultCardProps) {
   return (
-    <div
-      style={{
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: '12px',
-      }}
-      className="p-4"
-    >
+    <div className="card-legal p-4">
       <h3
-        style={{ color: 'var(--muted)' }}
-        className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1.5"
+        style={{ color: 'var(--accent)', fontFamily: "'Noto Serif JP', serif" }}
+        className="text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-1.5"
       >
         {icon && <span>{icon}</span>}
         {title}

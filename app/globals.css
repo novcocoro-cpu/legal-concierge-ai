@@ -1,19 +1,22 @@
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Noto+Serif+JP:wght@500;700&family=JetBrains+Mono:wght@400;600&display=swap');
 @import "tailwindcss";
 
 :root {
-  --bg:         #0d1117;
-  --surface:    #161b22;
-  --surface2:   #1c2128;
-  --border:     #30363d;
-  --accent:     #58a6ff;
-  --accent-dim: rgba(88,166,255,0.12);
+  --bg:         #0a1628;
+  --surface:    #0f1d32;
+  --surface2:   #152238;
+  --border:     #1e3050;
+  --accent:     #c9a84c;
+  --accent-dim: rgba(201,168,76,0.15);
+  --accent-light: #e0c96a;
   --success:    #3fb950;
   --warning:    #d29922;
   --danger:     #f85149;
   --purple:     #a371f7;
-  --text:       #e6edf3;
-  --muted:      #8b949e;
+  --text:       #e8e0d0;
+  --muted:      #8a9bb5;
+  --gold-grad:  linear-gradient(135deg, #c9a84c 0%, #e0c96a 50%, #c9a84c 100%);
+  --navy-deep:  #060e1a;
 }
 
 * {
@@ -29,6 +32,10 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+h1, h2, h3 {
+  font-family: 'Noto Serif JP', serif;
+}
+
 ::-webkit-scrollbar { display: none; }
 * { scrollbar-width: none; }
 
@@ -40,6 +47,11 @@ html, body {
 .pulse-ring-1 { animation: pulse-ring 1.8s ease-out infinite; }
 .pulse-ring-2 { animation: pulse-ring 1.8s ease-out 0.4s infinite; }
 .pulse-ring-3 { animation: pulse-ring 1.8s ease-out 0.8s infinite; }
+
+@keyframes pulse-gold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(201,168,76,0.4); }
+  50%      { box-shadow: 0 0 20px 8px rgba(201,168,76,0.15); }
+}
 
 @keyframes wave {
   0%, 100% { transform: scaleY(0.3); }
@@ -61,3 +73,14 @@ html, body {
 .toast { animation: toast-in 0.25s ease-out; }
 
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+.gold-glow {
+  box-shadow: 0 0 24px rgba(201,168,76,0.25), 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.card-legal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  border-left: 3px solid var(--accent);
+}

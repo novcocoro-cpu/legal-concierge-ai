@@ -8,7 +8,7 @@ interface ActionPlanListProps {
 }
 
 export default function ActionPlanList({ items }: ActionPlanListProps) {
-  if (!items?.length) return <p style={{ color: 'var(--muted)' }} className="text-sm">アクションプランなし</p>;
+  if (!items?.length) return <p style={{ color: 'var(--muted)' }} className="text-sm">宿題事項なし</p>;
 
   return (
     <div className="flex flex-col gap-3">

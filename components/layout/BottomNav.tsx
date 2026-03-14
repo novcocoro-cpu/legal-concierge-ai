@@ -4,9 +4,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const NAV_ITEMS = [
-  { href: '/record',  label: '録音', icon: '⚖️' },
-  { href: '/history', label: '履歴', icon: '📋' },
-  { href: '/todos',   label: '宿題', icon: '✅' },
+  { href: '/record',  label: '録音',   icon: '⚖️' },
+  { href: '/history', label: '履歴',   icon: '📋' },
+  { href: '/todos',   label: '宿題',   icon: '✅' },
+  { href: '/admin',   label: '管理',   icon: '⚙️' },
 ];
 
 export default function BottomNav() {
@@ -15,7 +16,7 @@ export default function BottomNav() {
   return (
     <nav
       style={{
-        background: 'var(--surface)',
+        background: 'linear-gradient(180deg, #0f1d32 0%, #0a1628 100%)',
         borderTop: '1px solid var(--border)',
       }}
       className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[480px] z-20 safe-bottom"
@@ -31,7 +32,7 @@ export default function BottomNav() {
               style={{ color: active ? 'var(--accent)' : 'var(--muted)' }}
             >
               <span className="text-xl">{icon}</span>
-              <span className="text-[10px] font-medium">{label}</span>
+              <span className="text-[10px] font-medium" style={{ fontFamily: "'Noto Sans JP', sans-serif" }}>{label}</span>
             </Link>
           );
         })}
