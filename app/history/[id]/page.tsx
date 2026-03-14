@@ -15,18 +15,18 @@ const PRIORITY_JA: Record<string, string> = { high: '高', medium: '中', low: '
 
 function buildPlainText(m: Meeting): string {
   const lines: string[] = [
-    `【会議タイトル】\n${m.title}`,
+    `【案件名】\n${m.title}`,
     `【日付】\n${formatDate(m.created_at)}`,
     `【録音時間】\n${formatDuration(m.duration_seconds)}`,
   ];
   if (m.summary)
-    lines.push(`【要約】\n${m.summary}`);
+    lines.push(`【相談内容の要約】\n${m.summary}`);
   if (m.problems?.length)
-    lines.push(`【問題点】\n${m.problems.map(p => `• ${p}`).join('\n')}`);
+    lines.push(`【法的論点・争点】\n${m.problems.map(p => `• ${p}`).join('\n')}`);
   if (m.improvements?.length)
-    lines.push(`【改善策・コンサルコメント】\n${m.improvements.map(i => `• ${i}`).join('\n')}`);
+    lines.push(`【対応方針】\n${m.improvements.map(i => `• ${i}`).join('\n')}`);
   if (m.action_plan?.length)
-    lines.push(`【TODOリスト】\n${m.action_plan.map(a =>
+    lines.push(`【宿題事項】\n${m.action_plan.map(a =>
       `• ${a.task}（担当: ${a.assignee}、期限: ${a.deadline}、優先度: ${PRIORITY_JA[a.priority] ?? a.priority}）`
     ).join('\n')}`);
   if (m.transcript)
@@ -37,13 +37,13 @@ function buildPlainText(m: Meeting): string {
 function buildCsv(m: Meeting): string {
   const rows: string[][] = [['項目名', '内容', '優先度']];
   if (m.summary)
-    rows.push(['要約', m.summary, '']);
+    rows.push(['相談要約', m.summary, '']);
   for (const p of m.problems ?? [])
-    rows.push(['問題点', p, '高']);
+    rows.push(['法的論点', p, '高']);
   for (const imp of m.improvements ?? [])
-    rows.push(['改善策', imp, '中']);
+    rows.push(['対応方針', imp, '中']);
   for (const a of m.action_plan ?? [])
-    rows.push([`TODO: ${a.task}`, `担当: ${a.assignee} / 期限: ${a.deadline}`, PRIORITY_JA[a.priority] ?? a.priority]);
+    rows.push([`宿題: ${a.task}`, `担当: ${a.assignee} / 期限: ${a.deadline}`, PRIORITY_JA[a.priority] ?? a.priority]);
   return rows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(',')).join('\r\n');
 }
 
@@ -87,8 +87,8 @@ export default function MeetingDetailPage() {
 
   const handleCsv = () => {
     if (!meeting) return;
-    const name = (meeting.title ?? '会議').replace(/[\\/:*?"<>|]/g, '_').slice(0, 50);
-    downloadBlob('\uFEFF' + buildCsv(meeting), `${name}_議事録.csv`, 'text/csv;charset=utf-8');
+    const name = (meeting.title ?? '案件').replace(/[\\/:*?"<>|]/g, '_').slice(0, 50);
+    downloadBlob('\uFEFF' + buildCsv(meeting), `${name}_相談記録.csv`, 'text/csv;charset=utf-8');
   };
 
   useEffect(() => {
@@ -130,7 +130,7 @@ export default function MeetingDetailPage() {
   if (!meeting) {
     return (
       <AppShell title="詳細">
-        <p style={{ color: 'var(--muted)' }} className="text-center py-20 text-sm">会議が見つかりません</p>
+        <p style={{ color: 'var(--muted)' }} className="text-center py-20 text-sm">相談記録が見つかりません</p>
       </AppShell>
     );
   }
@@ -163,11 +163,11 @@ export default function MeetingDetailPage() {
 
         <TranscriptAccordion transcript={meeting.transcript} />
 
-        <ResultCard title="会議の要約" icon="📄">
+        <ResultCard title="相談内容の要約" icon="📄">
           <p style={{ color: 'var(--text)' }} className="text-sm leading-relaxed">{meeting.summary}</p>
         </ResultCard>
 
-        <ResultCard title="問題点" icon="⚠️">
+        <ResultCard title="法的論点・争点" icon="⚠️">
           <ul className="flex flex-col gap-2">
             {meeting.problems?.map((p, i) => (
               <li key={i} style={{ color: 'var(--text)' }} className="text-sm flex items-start gap-2">
@@ -177,7 +177,7 @@ export default function MeetingDetailPage() {
           </ul>
         </ResultCard>
 
-        <ResultCard title="改善策" icon="💡">
+        <ResultCard title="対応方針" icon="💡">
           <ul className="flex flex-col gap-2">
             {meeting.improvements?.map((imp, i) => (
               <li key={i} style={{ color: 'var(--text)' }} className="text-sm flex items-start gap-2">
@@ -187,7 +187,7 @@ export default function MeetingDetailPage() {
           </ul>
         </ResultCard>
 
-        <ResultCard title="実践計画" icon="🎯">
+        <ResultCard title="宿題事項・期日" icon="🎯">
           <ActionPlanList items={meeting.action_plan} />
         </ResultCard>
 

@@ -1,8 +1,8 @@
-# 会議議事録 AI — CLAUDE.md
+# 弁護士ヒアリング 法務コンシェルジュ — CLAUDE.md
 
 ## 技術スタック
 - Next.js 14 (App Router) + TypeScript + Tailwind CSS
-- Supabase (DB), Gemini 1.5 Flash (AI分析)
+- Supabase (DB), Gemini 2.5 Flash (AI分析)
 
 ## 重要なルール
 - `GEMINI_API_KEY` はサーバーサイドのみ（`NEXT_PUBLIC_` 不可）

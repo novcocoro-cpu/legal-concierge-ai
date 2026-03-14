@@ -3,28 +3,38 @@ import { createServerClient } from '@/lib/supabase';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
 
-const PROMPT = `この会議音声を分析してください。
+const PROMPT = `あなたは経験豊富な弁護士アシスタントです。この法律相談の音声を分析してください。
 必ず以下のJSON形式のみで回答してください。
 マークダウン記法（\`\`\`json等）、説明文、前置きは一切不要です。純粋なJSONのみ返してください。
 
 {
-  "title": "会議タイトル（内容から推測、20文字以内）",
-  "transcript": "会議の文字起こし全文（複数話者の場合は「話者A：」等で区別）",
-  "summary": "会議の要約（3〜5文）",
-  "problems": ["問題点1", "問題点2", "問題点3"],
-  "improvements": ["改善策1", "改善策2", "改善策3"],
+  "title": "案件名（内容から推測、20文字以内）",
+  "transcript": "相談内容の文字起こし全文（複数話者の場合は「弁護士：」「相談者：」等で区別）",
+  "summary": "本件は〜（相談内容の要約を「本件は」で始まる法律文書調の文体で3〜5文）",
+  "problems": ["法的論点・争点1", "法的論点・争点2", "法的論点・争点3"],
+  "improvements": ["対応方針1（証拠収集・交渉・訴訟等の具体的方針）", "対応方針2", "対応方針3"],
   "action_plan": [
     {
-      "task": "具体的なタスク内容",
-      "assignee": "担当者名",
+      "task": "宿題事項（証拠収集、書面作成、期日対応等）",
+      "assignee": "担当弁護士名",
       "deadline": "YYYY-MM-DD",
       "priority": "high"
     }
   ],
   "next_meeting": {
     "suggested_timing": "例：2週間後",
-    "agenda": ["議題1", "議題2"],
-    "notes": "申し送り事項"
+    "agenda": ["次回期日の議題1", "次回期日の議題2"],
+    "notes": "申し送り事項・期日管理メモ"
+  },
+  "litigation_risk": {
+    "level": "高 or 中 or 低",
+    "description": "訴訟リスクの総合評価（勝訴可能性、損害賠償リスク等を含む）",
+    "factors": ["リスク要因1", "リスク要因2"]
+  },
+  "negotiation_strategy": {
+    "approach": "交渉戦略の概要（強硬路線/協調路線/段階的エスカレーション等）",
+    "psychological_notes": "相手方の心理的傾向・交渉上の注意点",
+    "key_points": ["交渉ポイント1", "交渉ポイント2"]
   }
 }`;
 
@@ -56,7 +66,7 @@ export async function transcribeAudioOnly(base64Audio: string, mimeType: string)
         contents: [{
           parts: [
             { inline_data: { mime_type: mimeType, data: base64Audio } },
-            { text: 'この音声を文字起こししてください。話者が複数いる場合は「話者A：」等で区別してください。文字起こし結果のテキストのみを返してください。' }
+            { text: 'この音声を文字起こししてください。話者が複数いる場合は「弁護士：」「相談者：」等で区別してください。文字起こし結果のテキストのみを返してください。' }
           ]
         }],
         generationConfig: {
@@ -89,7 +99,7 @@ export async function analyzeTranscript(transcript: string): Promise<GeminiResul
       body: JSON.stringify({
         contents: [{
           parts: [
-            { text: `以下は会議の文字起こしです。\n\n${transcript}\n\n${PROMPT}` }
+            { text: `以下は法律相談の文字起こしです。\n\n${transcript}\n\n${PROMPT}` }
           ]
         }],
         generationConfig: {

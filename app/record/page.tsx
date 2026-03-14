@@ -169,6 +169,7 @@ export default function RecordPage() {
   const [stepIndex, setStepIndex]   = useState(0);
   const [result, setResult]         = useState<GeminiResult | null>(null);
   const [durationSec, setDurationSec] = useState(0);
+  const [audioBlob, setAudioBlob]   = useState<Blob | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg]     = useState<string | null>(null);
   const [nameInput, setNameInput]     = useState('');
@@ -256,7 +257,7 @@ export default function RecordPage() {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || `HTTPエラー ${res.status}`);
       }
-      showSuccess('議事録を保存しました ✅');
+      showSuccess('相談記録を保存しました ✅');
       await clearRecordingBackup();   // 保存成功したらバックアップ削除
       setBackup(null);
     } catch (e) {
@@ -270,6 +271,7 @@ export default function RecordPage() {
 
   // 音声 Blob を受け取って文字起こし → 保存
   const analyzeBlob = useCallback(async (blob: Blob, dur: number) => {
+    setAudioBlob(blob);
     setPhase('analyzing');
     setStepIndex(0);
     const stepTimer = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 1200);
@@ -362,21 +364,21 @@ export default function RecordPage() {
     return (
       <div style={{ background: 'var(--bg)', maxWidth: '480px' }} className="mx-auto min-h-screen flex items-center justify-center p-6">
         <div className="w-full flex flex-col items-center gap-5">
-          <span className="text-6xl">🎙</span>
+          <span className="text-6xl">⚖️</span>
           <div className="text-center">
-            <h1 style={{ color: 'var(--text)' }} className="text-2xl font-bold mb-2">会議議事録 AI</h1>
+            <h1 style={{ color: 'var(--text)' }} className="text-2xl font-bold mb-2">法務コンシェルジュ</h1>
             <p style={{ color: 'var(--muted)' }} className="text-sm leading-relaxed">
-              録音するだけで、要約・問題点<br />改善策・アクションプランを<br />Gemini AI が自動生成します。
+              録音するだけで、相談要約・法的論点<br />対応方針・訴訟リスク評価を<br />Gemini AI が自動生成します。
             </p>
           </div>
 
-          {/* 会社名（必須） */}
+          {/* 事務所名（必須） */}
           <div className="w-full">
             <label style={{ color: 'var(--muted)' }} className="text-xs font-medium mb-1.5 block">
-              会社名・組織名 <span style={{ color: 'var(--danger)' }}>*</span>
+              法律事務所名 <span style={{ color: 'var(--danger)' }}>*</span>
             </label>
             <input
-              type="text" placeholder="例：株式会社サンプル"
+              type="text" placeholder="例：○○法律事務所"
               value={companyInput} onChange={e => setCompanyInput(e.target.value)}
               autoFocus
               className="w-full px-4 py-3 rounded-xl text-sm outline-none"
@@ -384,10 +386,10 @@ export default function RecordPage() {
             />
           </div>
 
-          {/* 個人名（必須） */}
+          {/* 弁護士名（必須） */}
           <div className="w-full">
             <label style={{ color: 'var(--muted)' }} className="text-xs font-medium mb-1.5 block">
-              あなたのお名前 <span style={{ color: 'var(--danger)' }}>*</span>
+              弁護士名 <span style={{ color: 'var(--danger)' }}>*</span>
             </label>
             <input
               type="text" placeholder="例：田中 太郎"
@@ -413,7 +415,7 @@ export default function RecordPage() {
 
   // ── メイン録音画面 ──
   return (
-    <AppShell title="🎙 録音">
+    <AppShell title="⚖️ ヒアリング録音">
       {successMsg && <SuccessToast message={successMsg} />}
       {errorMsg   && <ErrorBanner message={errorMsg} onClose={() => setErrorMsg(null)} />}
 
@@ -492,7 +494,7 @@ export default function RecordPage() {
             style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }} />
           <div className="text-center">
             <p style={{ color: 'var(--text)' }} className="font-semibold">{STEPS[stepIndex]}</p>
-            <p style={{ color: 'var(--muted)' }} className="text-xs mt-1">Gemini AI が解析中です</p>
+            <p style={{ color: 'var(--muted)' }} className="text-xs mt-1">AI が法律相談を解析中です</p>
           </div>
           <div className="flex gap-2">
             {STEPS.map((_, i) => (
@@ -513,10 +515,10 @@ export default function RecordPage() {
             </p>
           </div>
           <TranscriptAccordion transcript={result.transcript} />
-          <ResultCard title="会議の要約" icon="📄">
+          <ResultCard title="相談内容の要約" icon="📄">
             <p style={{ color: 'var(--text)' }} className="text-sm leading-relaxed">{result.summary}</p>
           </ResultCard>
-          <ResultCard title="問題点" icon="⚠️">
+          <ResultCard title="法的論点・争点" icon="⚠️">
             <ul className="flex flex-col gap-2">
               {result.problems?.map((p, i) => (
                 <li key={i} style={{ color: 'var(--text)' }} className="text-sm flex items-start gap-2">
@@ -525,7 +527,7 @@ export default function RecordPage() {
               ))}
             </ul>
           </ResultCard>
-          <ResultCard title="改善策" icon="💡">
+          <ResultCard title="対応方針" icon="💡">
             <ul className="flex flex-col gap-2">
               {result.improvements?.map((imp, i) => (
                 <li key={i} style={{ color: 'var(--text)' }} className="text-sm flex items-start gap-2">
@@ -534,17 +536,81 @@ export default function RecordPage() {
               ))}
             </ul>
           </ResultCard>
-          <ResultCard title="実践計画" icon="🎯">
+          {result.litigation_risk && (
+            <ResultCard title="訴訟リスク評価" icon="🔥">
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded" style={{
+                    background: result.litigation_risk.level === '高' ? 'var(--danger)' : result.litigation_risk.level === '中' ? 'var(--warning)' : 'var(--success)',
+                    color: '#fff'
+                  }}>{result.litigation_risk.level}</span>
+                  <span style={{ color: 'var(--text)' }} className="text-sm">{result.litigation_risk.description}</span>
+                </div>
+                <ul className="flex flex-col gap-1">
+                  {result.litigation_risk.factors?.map((f, i) => (
+                    <li key={i} style={{ color: 'var(--text)' }} className="text-sm flex items-start gap-2">
+                      <span style={{ color: 'var(--warning)' }}>•</span>{f}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </ResultCard>
+          )}
+          {result.negotiation_strategy && (
+            <ResultCard title="交渉戦略・心理的分析" icon="🧠">
+              <div className="flex flex-col gap-2">
+                <div>
+                  <p style={{ color: 'var(--muted)' }} className="text-xs mb-1">戦略</p>
+                  <p style={{ color: 'var(--text)' }} className="text-sm">{result.negotiation_strategy.approach}</p>
+                </div>
+                <div>
+                  <p style={{ color: 'var(--muted)' }} className="text-xs mb-1">心理的分析</p>
+                  <p style={{ color: 'var(--text)' }} className="text-sm">{result.negotiation_strategy.psychological_notes}</p>
+                </div>
+                <ul className="flex flex-col gap-1">
+                  {result.negotiation_strategy.key_points?.map((kp, i) => (
+                    <li key={i} style={{ color: 'var(--text)' }} className="text-sm flex items-start gap-2">
+                      <span style={{ color: 'var(--accent)' }}>•</span>{kp}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </ResultCard>
+          )}
+          <ResultCard title="宿題事項・期日" icon="🎯">
             <ActionPlanList items={result.action_plan} />
           </ResultCard>
           <NextMeetingCard data={result.next_meeting} />
 
+          {audioBlob && (
+            <button
+              onClick={() => {
+                const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                const caseName = (result?.title ?? '案件').replace(/[\\/:*?"<>|]/g, '_').slice(0, 30);
+                const fileName = `${date}_${caseName}.mp3`;
+                const url = URL.createObjectURL(audioBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+              style={{ background: 'var(--accent)', color: '#fff' }}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              録音データをダウンロード
+            </button>
+          )}
+
           <button
-            onClick={() => { setPhase('idle'); setResult(null); }}
+            onClick={() => { setPhase('idle'); setResult(null); setAudioBlob(null); }}
             className="w-full py-3 rounded-xl text-sm font-medium"
             style={{ background: 'var(--surface2)', color: 'var(--muted)', border: '1px solid var(--border)' }}
           >
-            新しい録音を開始
+            新しいヒアリングを開始
           </button>
         </div>
       )}

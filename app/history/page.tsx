@@ -11,7 +11,7 @@ export default function HistoryPage() {
   const { meetings, loading, error } = useMeetings(userId);
 
   return (
-    <AppShell title="📋 会議履歴">
+    <AppShell title="📋 相談履歴">
       <div className="p-4">
         {loading && (
           <div className="flex justify-center py-20">

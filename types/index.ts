@@ -44,14 +44,28 @@ export interface Meeting {
   created_at:       string;
 }
 
+export interface LitigationRisk {
+  level:       string;  // 高・中・低
+  description: string;
+  factors:     string[];
+}
+
+export interface NegotiationStrategy {
+  approach:             string;
+  psychological_notes:  string;
+  key_points:           string[];
+}
+
 export interface GeminiResult {
-  title:        string;
-  transcript:   string;
-  summary:      string;
-  problems:     string[];
-  improvements: string[];
-  action_plan:  ActionItem[];
-  next_meeting: NextMeeting;
+  title:                  string;
+  transcript:             string;
+  summary:                string;
+  problems:               string[];
+  improvements:           string[];
+  action_plan:            ActionItem[];
+  next_meeting:           NextMeeting;
+  litigation_risk?:       LitigationRisk;
+  negotiation_strategy?:  NegotiationStrategy;
 }
 
 export interface ErrorLog {

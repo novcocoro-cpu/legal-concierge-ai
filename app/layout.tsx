@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: '会議議事録 AI',
-  description: '録音するだけで会議を自動分析',
+  title: '弁護士ヒアリング 法務コンシェルジュ',
+  description: '録音するだけで法律相談を自動分析',
 };
 
 export const viewport: Viewport = {

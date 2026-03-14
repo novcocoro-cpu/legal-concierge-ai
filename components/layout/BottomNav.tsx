@@ -4,9 +4,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const NAV_ITEMS = [
-  { href: '/record',  label: '録音', icon: '🎙' },
+  { href: '/record',  label: '録音', icon: '⚖️' },
   { href: '/history', label: '履歴', icon: '📋' },
-  { href: '/todos',   label: 'TODO', icon: '✅' },
+  { href: '/todos',   label: '宿題', icon: '✅' },
 ];
 
 export default function BottomNav() {
